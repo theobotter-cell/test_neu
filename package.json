@@ -1,15 +1,16 @@
 {
-  "name": "contact-insights",
+  "name": "deal-change-history",
   "version": "1.0.0",
   "private": true,
-  "description": "Bitrix24 Contact Insights app (CRM_CONTACT_DETAIL_TAB placement) deployed on Vibecode Black Hole.",
+  "description": "Bitrix24 Deal Change History app (CRM_DEAL_DETAIL_TAB placement) deployed on Vibecode Black Hole.",
   "type": "commonjs",
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.test.json && VIBE_APP_KEY=test-only-placeholder node --test dist-test/test/*.test.js"
   },
   "dependencies": {
     "express": "^4.19.2"

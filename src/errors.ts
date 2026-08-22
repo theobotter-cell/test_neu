@@ -8,11 +8,12 @@ export interface FriendlyError {
   retryAfterSeconds?: number
 }
 
-const NOT_FOUND_CODES = new Set(['ENTITY_NOT_FOUND', 'CONTACT_NOT_FOUND'])
+const NOT_FOUND_CODES = new Set(['ENTITY_NOT_FOUND', 'DEAL_NOT_FOUND'])
 const ACCESS_DENIED_CODES = new Set(['ACCESS_DENIED'])
 const SCOPE_DENIED_CODES = new Set(['SCOPE_DENIED', 'INSUFFICIENT_SCOPE'])
 const SESSION_CODES = new Set(['TOKEN_MISSING', 'SESSION_EXPIRED', 'INVALID_API_KEY'])
-const RATE_LIMIT_CODES = new Set(['RATE_LIMITED', 'AGGREGATION_LIMIT_EXCEEDED'])
+const RATE_LIMIT_CODES = new Set(['RATE_LIMITED'])
+const UNSUPPORTED_CODES = new Set(['INVALID_ENTITY_TYPE', 'INVALID_FILTER_FIELD'])
 
 /**
  * Translates a Vibecode/Bitrix24 error into a message safe to show inside the
@@ -33,8 +34,8 @@ export function toFriendlyError(err: unknown): FriendlyError {
   if (NOT_FOUND_CODES.has(err.code) || err.httpStatus === 404) {
     return {
       httpStatus: 404,
-      code: 'CONTACT_NOT_FOUND',
-      message: 'This contact could not be found. It may have been deleted.',
+      code: 'DEAL_NOT_FOUND',
+      message: 'The Deal could not be found or is no longer available.',
       retryable: false,
     }
   }
@@ -43,7 +44,7 @@ export function toFriendlyError(err: unknown): FriendlyError {
     return {
       httpStatus: 401,
       code: 'SESSION_EXPIRED',
-      message: 'Your session has expired. Please reopen this tab from the Contact card.',
+      message: 'Your session has expired. Please reopen this tab from the Deal card.',
       retryable: false,
     }
   }
@@ -61,7 +62,16 @@ export function toFriendlyError(err: unknown): FriendlyError {
     return {
       httpStatus: 403,
       code: 'ACCESS_DENIED',
-      message: "You don't have permission to view this contact in Bitrix24.",
+      message: 'You do not have permission to view this Deal or its change history.',
+      retryable: false,
+    }
+  }
+
+  if (UNSUPPORTED_CODES.has(err.code)) {
+    return {
+      httpStatus: 501,
+      code: 'HISTORY_UNSUPPORTED',
+      message: 'Deal change history is not available through the API for this portal.',
       retryable: false,
     }
   }
@@ -76,7 +86,7 @@ export function toFriendlyError(err: unknown): FriendlyError {
     }
   }
 
-  if (err.httpStatus >= 500 || err.httpStatus === 503) {
+  if (err.httpStatus >= 500) {
     return {
       httpStatus: 503,
       code: 'UPSTREAM_UNAVAILABLE',
@@ -89,7 +99,7 @@ export function toFriendlyError(err: unknown): FriendlyError {
   return {
     httpStatus: 502,
     code: err.code,
-    message: 'This statistic could not be loaded right now.',
+    message: 'The change history could not be loaded right now.',
     retryable: true,
   }
 }

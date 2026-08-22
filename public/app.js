@@ -1,62 +1,96 @@
 import { readPlacementContext } from './placement.js'
-import { fetchContactStats, sendViewEvent, ApiError } from './api.js'
-import { renderSkeleton, renderStatePanel, renderStats } from './render.js'
+import { fetchDealHistory, ApiError } from './api.js'
+import { renderSkeleton, renderStatePanel, renderHistory } from './render.js'
 
 const root = document.getElementById('app')
+const PAGE_SIZE = 50
 
-// Generated once per page load (module scope, not sessionStorage) — every
-// refresh-button click reuses the same value, so the view endpoint (called
-// only on the very first load) can never fire twice for one tab opening.
-const viewNonce = crypto.randomUUID()
+// Accumulated entries for the current (dealId, order) session — reset on
+// refresh or order change, appended to on "Load more".
+let state = null
 
 async function main() {
-  const { contactId } = readPlacementContext()
+  const { dealId } = readPlacementContext()
 
-  if (!contactId) {
+  if (!dealId) {
     renderStatePanel(root, {
-      title: 'No contact selected',
-      message: 'Open this app from the Contact Insights tab on a Contact card in Bitrix24.',
+      title: 'No Deal selected',
+      message: 'This app must be opened from a Deal card.',
       showRetry: false,
     })
     return
   }
 
-  sendViewEvent(contactId, viewNonce)
-  await loadStats(contactId)
+  await loadFirstPage(dealId, 'asc')
 }
 
-async function loadStats(contactId, { refreshing = false } = {}) {
+async function loadFirstPage(dealId, order, { refreshing = false } = {}) {
   if (!refreshing) renderSkeleton(root)
 
   try {
-    const data = await fetchContactStats(contactId)
-    renderStats(root, data, {
-      refreshing: false,
-      onRefresh: () => loadStats(contactId, { refreshing: true }),
-    })
+    const page = await fetchDealHistory(dealId, { order, offset: 0, limit: PAGE_SIZE })
+    state = { dealId, order, entries: page.entries, page }
+    renderHistory(root, page, buildHandlers())
   } catch (err) {
-    if (err instanceof ApiError) {
-      renderStatePanel(root, {
-        title: titleFor(err.code),
-        message: err.message,
-        showRetry: err.retryable,
-        onRetry: () => loadStats(contactId),
-      })
-      return
-    }
-    renderStatePanel(root, {
-      title: 'Something went wrong',
-      message: 'Could not load Contact Insights. Please try again.',
-      showRetry: true,
-      onRetry: () => loadStats(contactId),
-    })
+    renderError(err, () => loadFirstPage(dealId, order))
   }
+}
+
+async function loadMore() {
+  if (!state || !state.page.hasMore) return
+  renderHistory(root, state.page, { ...buildHandlers(), loadingMore: true })
+
+  try {
+    const next = await fetchDealHistory(state.dealId, {
+      order: state.order,
+      offset: state.page.nextOffset,
+      limit: PAGE_SIZE,
+    })
+    const entries = [...state.entries, ...next.entries]
+    const page = { ...next, entries, loaded: next.loaded }
+    state = { ...state, entries, page }
+    renderHistory(root, page, buildHandlers())
+  } catch (err) {
+    renderError(err, () => loadFirstPage(state.dealId, state.order))
+  }
+}
+
+function onOrderChange(order) {
+  if (!state) return
+  loadFirstPage(state.dealId, order)
+}
+
+function onRefresh() {
+  if (!state) return
+  loadFirstPage(state.dealId, state.order, { refreshing: true })
+}
+
+function buildHandlers() {
+  return { onRefresh, onOrderChange, onLoadMore: loadMore, refreshing: false, loadingMore: false }
+}
+
+function renderError(err, onRetry) {
+  if (err instanceof ApiError) {
+    renderStatePanel(root, {
+      title: titleFor(err.code),
+      message: err.message,
+      showRetry: err.retryable,
+      onRetry,
+    })
+    return
+  }
+  renderStatePanel(root, {
+    title: 'Something went wrong',
+    message: 'Could not load the change history. Please try again.',
+    showRetry: true,
+    onRetry,
+  })
 }
 
 function titleFor(code) {
   switch (code) {
-    case 'CONTACT_NOT_FOUND':
-      return 'Contact not found'
+    case 'DEAL_NOT_FOUND':
+      return 'Deal not found'
     case 'ACCESS_DENIED':
     case 'SCOPE_DENIED':
       return 'Access restricted'
@@ -64,10 +98,12 @@ function titleFor(code) {
       return 'Session expired'
     case 'RATE_LIMITED':
       return 'Slow down a moment'
+    case 'HISTORY_UNSUPPORTED':
+      return 'History unavailable'
     case 'UPSTREAM_UNAVAILABLE':
       return 'Temporarily unavailable'
     default:
-      return 'Could not load statistics'
+      return 'Could not load change history'
   }
 }
 

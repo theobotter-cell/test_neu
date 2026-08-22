@@ -1,25 +1,16 @@
 // Minimal inline icon set (stroke-based, 24x24 viewbox) — no icon font or CDN.
-// Icons are decorative only: every KPI card still carries a text label, so the
-// statistic is never conveyed by the icon alone.
+// Icons are decorative only: every use still carries a text label alongside it.
 
 const svg = (paths) =>
-  `<svg class="kpi-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`
+  `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`
 
 export const icons = {
-  calendar: svg(
-    '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
-  ),
-  eye: svg(
-    '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/>',
-  ),
-  inbox: svg(
-    '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/>',
-  ),
-  send: svg('<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>'),
-  mail: svg(
-    '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/>',
-  ),
-  message: svg(
-    '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/>',
+  refresh: svg('<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>'),
+  sort: svg('<path d="M3 6h18M6 12h12M10 18h4"/>'),
+  user: svg('<path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="8" r="5"/>'),
+  info: svg('<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>'),
+  stage: svg('<path d="M4 4v16M4 4h13l-3 4 3 4H4"/>'),
+  empty: svg(
+    '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M8 14h.01M12 14h4"/>',
   ),
 }

@@ -1,29 +1,20 @@
 import { icons } from './icons.js'
 
-const dateFormatter = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
-const relativeFormatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
+const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
 
 // Dates are formatted in the browser's own locale/timezone (the timezone of
 // the employee currently viewing the card), never assumed to be UTC.
-export function formatDate(iso) {
+export function formatDateTime(iso) {
   if (!iso) return '—'
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return '—'
-  return dateFormatter.format(date)
-}
-
-export function formatRelative(iso) {
-  if (!iso) return ''
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return ''
-  const diffMs = date.getTime() - Date.now()
-  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24))
-  if (Math.abs(diffDays) < 1) return 'today'
-  if (Math.abs(diffDays) < 30) return relativeFormatter.format(diffDays, 'day')
-  const diffMonths = Math.round(diffDays / 30)
-  if (Math.abs(diffMonths) < 12) return relativeFormatter.format(diffMonths, 'month')
-  const diffYears = Math.round(diffDays / 365)
-  return relativeFormatter.format(diffYears, 'year')
+  return dateTimeFormatter.format(date)
 }
 
 function el(html) {
@@ -32,25 +23,45 @@ function el(html) {
   return template.content.firstElementChild
 }
 
-function kpiCard({ icon, label, value, sub, unavailable }) {
-  const valueHtml = unavailable
-    ? `<div class="kpi-value unavailable">Unavailable</div>`
-    : `<div class="kpi-value">${value}</div>`
+function escapeHtml(str) {
+  const div = document.createElement('div')
+  div.textContent = str ?? ''
+  return div.innerHTML
+}
+
+function semanticBadge(semantics) {
+  if (semantics === 'S') return '<span class="stage-flag won">Won</span>'
+  if (semantics === 'F') return '<span class="stage-flag lost">Lost</span>'
+  return ''
+}
+
+function historyRow(entry) {
   return `
-    <div class="kpi-card">
-      <div class="kpi-card-head">${icons[icon]}<span>${label}</span></div>
-      ${valueHtml}
-      ${sub ? `<div class="kpi-sub">${sub}</div>` : ''}
+    <div class="history-row" role="row">
+      <div class="cell cell-date" role="cell" data-label="Date &amp; time">${formatDateTime(entry.changedAt)}</div>
+      <div class="cell cell-user" role="cell" data-label="Changed by">
+        ${icons.user}<span>${entry.changedByName ? escapeHtml(entry.changedByName) : 'User unavailable'}</span>
+      </div>
+      <div class="cell cell-field" role="cell" data-label="Field">
+        <span class="field-badge">${icons.stage}Stage</span>
+      </div>
+      <div class="cell cell-old" role="cell" data-label="Previous value">${escapeHtml(entry.oldValue.label)}</div>
+      <div class="cell cell-new" role="cell" data-label="New value">
+        ${escapeHtml(entry.newValue.label)}${semanticBadge(entry.semantics)}
+      </div>
     </div>`
 }
 
 export function renderSkeleton(root) {
-  const cards = Array.from({ length: 6 })
+  const rows = Array.from({ length: 6 })
     .map(
       () => `
-      <div class="kpi-card">
-        <div class="skel skel-label" style="width:50%;margin-bottom:10px;"></div>
-        <div class="skel skel-value"></div>
+      <div class="history-row skeleton-row">
+        <div class="skel skel-line" style="width:120px"></div>
+        <div class="skel skel-line" style="width:100px"></div>
+        <div class="skel skel-line" style="width:60px"></div>
+        <div class="skel skel-line" style="width:90px"></div>
+        <div class="skel skel-line" style="width:90px"></div>
       </div>`,
     )
     .join('')
@@ -58,19 +69,19 @@ export function renderSkeleton(root) {
   root.innerHTML = `
     <div class="header">
       <div class="header-titles">
-        <h1>Contact Insights</h1>
-        <p class="skel skel-label" style="width:140px;height:15px;"></p>
+        <h1>Change History</h1>
+        <p class="skel skel-line" style="width:160px;height:14px;"></p>
       </div>
     </div>
-    <div class="kpi-grid">${cards}</div>`
+    <div class="history-list">${rows}</div>`
 }
 
 export function renderStatePanel(root, { title, message, showRetry, onRetry }) {
   root.innerHTML = ''
   const panel = el(`
     <div class="state-panel error">
-      <h2>${title}</h2>
-      <p>${message}</p>
+      <h2>${escapeHtml(title)}</h2>
+      <p>${escapeHtml(message)}</p>
       ${showRetry ? '<button type="button" class="retry-btn">Retry</button>' : ''}
     </div>`)
   if (showRetry) {
@@ -79,71 +90,77 @@ export function renderStatePanel(root, { title, message, showRetry, onRetry }) {
   root.appendChild(panel)
 }
 
-export function renderStats(root, data, { onRefresh, refreshing }) {
-  const { contact, statistics, unavailable = [] } = data
-  const isUnavailable = (key) => unavailable.includes(key)
+export function renderHistory(root, page, handlers) {
+  const { deal, entries, order, loaded, hasMore, totalKnown, warnings } = page
+  const { onRefresh, onOrderChange, onLoadMore, refreshing, loadingMore } = handlers
+
+  const countLabel =
+    totalKnown !== null ? `${totalKnown} change${totalKnown === 1 ? '' : 's'} available` : `Loaded ${loaded} changes`
 
   root.innerHTML = `
     <div class="header">
       <div class="header-titles">
-        <h1>Contact Insights</h1>
-        <p class="contact-name">${escapeHtml(contact.name)}</p>
-        <p class="contact-id">Contact #${contact.id}</p>
+        <h1>Change History</h1>
+        <p class="deal-title">${escapeHtml(deal.title)}</p>
+        <p class="deal-meta">${escapeHtml(countLabel)}</p>
       </div>
-      <button type="button" class="refresh-btn" aria-label="Refresh statistics" ${refreshing ? 'aria-busy="true" disabled' : ''}>
-        <svg class="kpi-icon refresh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
-        Refresh
-      </button>
+      <div class="header-actions">
+        <label class="order-select">
+          ${icons.sort}
+          <select aria-label="Sort order">
+            <option value="asc" ${order === 'asc' ? 'selected' : ''}>Oldest first</option>
+            <option value="desc" ${order === 'desc' ? 'selected' : ''}>Newest first</option>
+          </select>
+        </label>
+        <button type="button" class="refresh-btn" aria-label="Refresh change history" ${
+          refreshing ? 'aria-busy="true" disabled' : ''
+        }>
+          ${icons.refresh}
+          Refresh
+        </button>
+      </div>
     </div>
+
+    <div class="notice-banner info">
+      ${icons.info}
+      <span>This view shows field and stage history available from Bitrix24. It does not include general timeline activities.</span>
+    </div>
+
     ${
-      unavailable.length > 0
-        ? `<div class="notice-banner">Some statistics could not be loaded right now (${unavailable.join(', ')}). The rest are shown below.</div>`
+      warnings.length > 0
+        ? `<div class="notice-banner warning">${icons.info}<span>${escapeHtml(warnings.join(' '))}</span></div>`
         : ''
     }
-    <div class="kpi-grid">
-      ${kpiCard({
-        icon: 'calendar',
-        label: 'Created',
-        value: formatDate(contact.createdAt),
-        sub: formatRelative(contact.createdAt),
-      })}
-      ${kpiCard({
-        icon: 'eye',
-        label: 'Insights views',
-        value: statistics.views,
-        sub: `Tracked since ${formatDate(statistics.trackingSince)}`,
-      })}
-      ${kpiCard({
-        icon: 'inbox',
-        label: 'Incoming emails',
-        value: statistics.incomingEmails,
-        unavailable: isUnavailable('incomingEmails'),
-      })}
-      ${kpiCard({
-        icon: 'send',
-        label: 'Outgoing emails',
-        value: statistics.outgoingEmails,
-        unavailable: isUnavailable('outgoingEmails'),
-      })}
-      ${kpiCard({
-        icon: 'mail',
-        label: 'Total emails',
-        value: statistics.totalEmails,
-        unavailable: statistics.totalEmails === null,
-      })}
-      ${kpiCard({
-        icon: 'message',
-        label: 'Timeline comments',
-        value: statistics.timelineComments,
-        unavailable: isUnavailable('timelineComments'),
-      })}
-    </div>`
+
+    ${
+      entries.length === 0
+        ? `<div class="state-panel empty">
+            ${icons.empty}
+            <h2>No changes found</h2>
+            <p>No field or stage changes are available for this Deal.</p>
+          </div>`
+        : `<div class="history-list" role="table" aria-label="Deal change history">
+            <div class="history-row history-row-head" role="row">
+              <div class="cell" role="columnheader">Date &amp; time</div>
+              <div class="cell" role="columnheader">Changed by</div>
+              <div class="cell" role="columnheader">Field</div>
+              <div class="cell" role="columnheader">Previous value</div>
+              <div class="cell" role="columnheader">New value</div>
+            </div>
+            ${entries.map(historyRow).join('')}
+          </div>
+          ${
+            hasMore
+              ? `<button type="button" class="load-more-btn" ${loadingMore ? 'aria-busy="true" disabled' : ''}>
+                  ${loadingMore ? 'Loading…' : 'Load more'}
+                </button>`
+              : ''
+          }`
+    }
+  `
 
   root.querySelector('.refresh-btn').addEventListener('click', onRefresh)
-}
-
-function escapeHtml(str) {
-  const div = document.createElement('div')
-  div.textContent = str ?? ''
-  return div.innerHTML
+  root.querySelector('.order-select select').addEventListener('change', (e) => onOrderChange(e.target.value))
+  const loadMoreBtn = root.querySelector('.load-more-btn')
+  if (loadMoreBtn) loadMoreBtn.addEventListener('click', onLoadMore)
 }

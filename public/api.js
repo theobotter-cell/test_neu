@@ -19,22 +19,19 @@ async function parseErrorBody(res) {
   }
 }
 
-export async function fetchContactStats(contactId) {
-  const res = await fetch(`/api/contact-stats/${encodeURIComponent(contactId)}`, {
+export async function fetchDealHistory(dealId, { order, offset = 0, limit = 50 } = {}) {
+  const qs = new URLSearchParams({ order, offset: String(offset), limit: String(limit) })
+  const res = await fetch(`/api/deal-history/${encodeURIComponent(dealId)}?${qs}`, {
     headers: { Accept: 'application/json' },
   })
   if (!res.ok) {
     const err = await parseErrorBody(res)
-    throw new ApiError(res.status, err.code || 'UNKNOWN', err.message || 'Failed to load statistics.', Boolean(err.retryable))
+    throw new ApiError(
+      res.status,
+      err.code || 'UNKNOWN',
+      err.message || 'Failed to load change history.',
+      Boolean(err.retryable),
+    )
   }
   return res.json()
-}
-
-export function sendViewEvent(contactId, nonce) {
-  // Fire-and-forget: a failure here must never block or degrade the stats view.
-  return fetch(`/api/contact-stats/${encodeURIComponent(contactId)}/view`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nonce }),
-  }).catch(() => undefined)
 }

@@ -1,35 +1,53 @@
-# Contact Insights
+# Deal Change History
 
-A Bitrix24 CRM application that embeds directly into the Contact detail card
-(`CRM_CONTACT_DETAIL_TAB` placement) and shows a compact statistics panel for
-the contact currently open — no manual contact ID entry, ever.
+A Bitrix24 CRM application that embeds directly into the Deal detail card
+(`CRM_DEAL_DETAIL_TAB` placement) and shows the Deal's native stage/status
+change history — no manual Deal ID entry, ever.
 
 Deployed on [Vibecode](https://vibecode.bitrix24.com) Black Hole, using its
 transparent per-user authorization (BFF) model: the browser never sees any
 credential, and every Bitrix24 API call runs as the employee who opened the
 tab, so CRM permissions are always respected.
 
-## What it shows
+## What it shows — and what it deliberately doesn't
 
-| Card | Source |
+Vibecode's V1 API surface was verified live against `GET /v1/guide` and
+`GET /v1/openapi.json?scope=crm` before writing any code. That surface
+exposes **one** history source for deals:
+
+| Source | Verified as |
 |---|---|
-| Created | `GET /v1/contacts/:id` → `createdTime` |
-| Insights views | Our own durable counter — see below, **not** a native Bitrix24 view count |
-| Incoming emails | `POST /v1/activities/aggregate`, `filter: { ownerTypeId: 3, ownerId, typeId: 4, direction: 1 }` |
-| Outgoing emails | Same aggregate, `direction: 2` |
-| Total emails | `incomingEmails + outgoingEmails`, computed server-side |
-| Timeline comments | `POST /v1/timelines/search`, `filter: { entityType: "contact", entityId }`, read from `meta.total` |
+| `GET /v1/stage-history?entityType=deal&ownerId=<id>` | Equivalent of Bitrix24's `crm.stagehistory.list` |
 
-### Why "Insights views", not "Contact views"
+There is **no** equivalent of `crm.item.history.list` (full field-value
+change history) on this platform — confirmed by reading the full `entities`,
+`crmExtras`, `timelines`/`timelineLogs`, and `knownIssues` sections of the
+guide, and by the OpenAPI schema. So this app shows **stage/status
+transitions only**, not arbitrary field edits. That is a platform
+limitation, not a shortcut: the UI states this honestly ("This view shows
+field and stage history available from Bitrix24. It does not include
+general timeline activities.") rather than implying a completeness it
+cannot deliver.
 
-Bitrix24 does not expose a historical view/audit log for CRM contact cards
-through the Vibecode API, and the Contact's `opened` field is a
-visibility/availability flag ("available to everyone"), **not** a view
-counter — using it as one would be actively misleading. Instead, the app
-counts how many times employees have opened *this tab* since the app was
-installed, and labels it honestly: **"Insights views"**, with a "Tracked
-since `<install date>`" subtitle. This is the only view metric anyone here
-implements — there is no dual "real vs. approximate" number to reconcile.
+Two further limitations, both verified against a real portal
+(`linxys-demo.bitrix24.de`) rather than assumed:
+
+- **No actor per stage-history record.** The endpoint's rows carry no
+  "changed by" field at all. The Deal's own `movedBy`/`movedTime` describe
+  only the single most recent move, so only the latest transition can ever
+  be attributed (matched by timestamp, see `attachMoverToLatest` in
+  `src/format.ts`) — every earlier row honestly shows "User unavailable"
+  rather than guessing.
+- **No previous-stage field.** Each row marks entry *into* a stage; there is
+  no from/to pair. "Previous stage" is derived as the stage the
+  immediately-earlier chronological record entered (`deriveTransitions`).
+  The first-ever record for a deal has no previous stage and says so
+  ("Previous stage unavailable") instead of inventing one.
+- **Deleted/renamed stages.** Historical `stageId`s can reference stages no
+  longer in the portal's current stage list (verified live: deal #368's
+  2020 history references `"1"` and `"PREPARATION"`, neither of which
+  exists in the portal's current `DEAL_STAGE` list today). These render as
+  `Unknown stage (<code>)` rather than a fabricated label.
 
 ## Architecture
 
@@ -48,47 +66,58 @@ Vibecode V1 API → Bitrix24 CRM
   on documented transient errors (429/502/503/504), Retry-After aware.
 - `src/identity.ts` — extracts the Gateway-injected bearer token. No client
   secret ever reaches the browser; the app never runs its own OAuth screen.
-- `src/contactStats.ts` — validates the contact ID, fetches contact +
-  email counts + comment count + view count concurrently (`Promise.allSettled`),
-  degrades gracefully if one statistic fails.
-- `src/viewStore.ts` — durable, file-backed (JSON, atomic write) per-contact
-  view counter, keyed by contact ID, deployed under a declared persistent
-  `dataDirs` path so it survives redeploys. Idempotent per page-load nonce so
-  a refresh or duplicate request never double-counts one tab opening.
+- `src/format.ts` — **pure** normalization layer (no network calls): sorts
+  history chronologically, derives previous-stage, attributes the one
+  actor we can honestly attribute, resolves stage labels with fallbacks,
+  paginates. Unit tested (`test/format.test.ts`) including against the
+  exact live response shape for deal #368.
+- `src/dealHistory.ts` — I/O layer: fetches the deal, fetches the deal's
+  full stage history (bounded, per-deal — never a portal-wide scan),
+  resolves stage labels (`/v1/statuses/search`, entity `DEAL_STAGE` or
+  `DEAL_STAGE_{categoryId}`) and the one resolvable actor's name
+  (`/v1/users/:id`), then slices the result into UI pages.
 - `src/errors.ts` — maps Vibecode/Bitrix24 error codes to safe, friendly
   messages (never raw upstream payloads or stack traces).
 - `public/` — vanilla JS/HTML/CSS frontend (no build step, no framework):
-  `placement.js` reads the contact ID from the placement URL,
-  `api.js` talks only to our own backend, `render.js` draws skeleton /
-  error / KPI states.
+  `placement.js` reads the Deal ID from the placement URL, `api.js` talks
+  only to our own backend, `render.js` draws the list/skeleton/error/empty
+  states with an oldest/newest toggle and "Load more" pagination.
 
 ## API
 
-`GET /api/contact-stats/:contactId`
+`GET /api/deal-history/:dealId?order=asc|desc&offset=0&limit=50`
 
 ```json
 {
-  "contact": { "id": 123, "name": "John Smith", "createdAt": "2024-04-15T12:26:17+02:00" },
-  "statistics": {
-    "incomingEmails": 24,
-    "outgoingEmails": 17,
-    "totalEmails": 41,
-    "timelineComments": 12,
-    "views": 37,
-    "viewMetricType": "insights_views",
-    "trackingSince": "2026-08-22T00:00:00.000Z"
-  },
-  "unavailable": []
+  "deal": { "id": 368, "title": "Bowman AG", "currentStageLabel": "Vertrag unterschieben" },
+  "entries": [
+    {
+      "stableId": "stage-1742",
+      "changedAt": "2021-02-04T14:39:32+03:00",
+      "changedById": 6,
+      "changedByName": "Stefan Krügl",
+      "fieldId": "stageId",
+      "fieldLabel": "Stage",
+      "oldValue": { "raw": "4", "label": "Orange" },
+      "newValue": { "raw": "WON", "label": "Vertrag unterschieben" },
+      "kind": "stage",
+      "semantics": "S"
+    }
+  ],
+  "order": "asc",
+  "loaded": 5,
+  "hasMore": false,
+  "nextOffset": null,
+  "totalKnown": 5,
+  "warnings": []
 }
 ```
 
-`unavailable` lists any statistic that failed to load this time (e.g.
-`["timelineComments"]`) — the rest of the response is still valid and the UI
-renders those cards as "Unavailable" instead of failing the whole screen.
-
-`POST /api/contact-stats/:contactId/view` `{ "nonce": "<per-page-load-uuid>" }`
-Records one tab opening. Called exactly once per page load from the
-frontend; safe to retry (idempotent per nonce).
+`order` defaults to `asc` (oldest first). `totalKnown` is the exact count
+(this app fetches a deal's full stage history server-side, bounded at 2000
+records, to compute chronological order and previous-stage correctly) —
+it becomes `null` only if that bound was hit, at which point `warnings`
+explains the history may be incomplete.
 
 ## Configuration
 
@@ -96,7 +125,8 @@ frontend; safe to retry (idempotent per nonce).
 |---|---|---|
 | `VIBE_APP_KEY` | yes | The `vibe_app_*` OAuth application key. Server-side only — never in a source file, never sent to the browser. |
 | `PORT` | no | Defaults to 3000 (platform-assigned on Vibecode). |
-| `DATA_DIR` | no | Where `views.json` lives. Defaults to `/opt/data/state` in production (a declared persistent `dataDirs` path); use `./data` locally. |
+
+No persistent storage is used — every request reads live from Bitrix24.
 
 ## Local development
 
@@ -106,8 +136,17 @@ cp .env.example .env   # fill in VIBE_APP_KEY
 npm run build && npm start
 ```
 
+## Tests
+
+```bash
+npm test        # pure normalization/pagination logic, node:test
+npm run typecheck
+npm run build
+```
+
 ## Deployment
 
 Built and deployed to Vibecode Black Hole (Node 20 runtime), bound to the
-`CRM_CONTACT_DETAIL_TAB` placement. See the deployment report for the live
-URL, verification steps, and known Bitrix24 limitations.
+`CRM_DEAL_DETAIL_TAB` placement. See the deployment report delivered with
+this change for the live URL, verification steps, and known Bitrix24
+history/retention limitations.
