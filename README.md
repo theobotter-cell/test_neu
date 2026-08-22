@@ -61,6 +61,21 @@ Two further limitations, both verified against a real portal
   exists in the portal's current `DEAL_STAGE` list today). These render as
   `Unknown stage (<code>)` rather than a fabricated label.
 
+## Entry points
+
+Bound placements, all scoped to a single Deal already in context (no list-level
+or bulk placements — those don't carry a single entity ID):
+
+| Placement | Where it shows | Context shape |
+|---|---|---|
+| `CRM_DEAL_DETAIL_TAB` | Tab on the Deal card | `placement_options: {"ID": "<deal>"}` — documented |
+| `CRM_DEAL_DETAIL_TOOLBAR` | Dropdown item in the Deal card toolbar | same — documented |
+| `CRM_DEAL_DETAIL_ACTIVITY` | Activity button in the Deal card | same, by Bitrix24 convention — not explicitly documented on this platform, unconfirmed by a real click-through |
+
+All three open the identical read-only history view; `placement.js`/`app.js`
+don't branch on which placement opened the app, so no extra code was needed —
+just binding the placement on the Bitrix24 side.
+
 ## Architecture
 
 ```
