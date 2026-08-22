@@ -8,71 +8,88 @@ export interface FriendlyError {
   retryAfterSeconds?: number
 }
 
+const NOT_FOUND_CODES = new Set(['ENTITY_NOT_FOUND', 'CONTACT_NOT_FOUND'])
+const ACCESS_DENIED_CODES = new Set(['ACCESS_DENIED'])
+const SCOPE_DENIED_CODES = new Set(['SCOPE_DENIED', 'INSUFFICIENT_SCOPE'])
+const SESSION_CODES = new Set(['TOKEN_MISSING', 'SESSION_EXPIRED', 'INVALID_API_KEY'])
+const RATE_LIMIT_CODES = new Set(['RATE_LIMITED', 'AGGREGATION_LIMIT_EXCEEDED'])
+
 /**
  * Translates a Vibecode/Bitrix24 error into a message safe to show inside the
- * Bitrix24 iframe — no stack traces, no raw upstream payloads.
+ * Bitrix24 iframe — no stack traces, no raw upstream payloads. Keys off the real
+ * HTTP status first (so an unmapped code still gets a sane status), then refines
+ * the message using the documented error code where we recognize it.
  */
 export function toFriendlyError(err: unknown): FriendlyError {
-  if (err instanceof VibeApiError) {
-    switch (err.code) {
-      case 'CONTACT_NOT_FOUND':
-      case 'HTTP_404':
-        return {
-          httpStatus: 404,
-          code: 'CONTACT_NOT_FOUND',
-          message: 'This contact could not be found. It may have been deleted.',
-          retryable: false,
-        }
-      case 'HTTP_403':
-      case 'ACCESS_DENIED':
-      case 'INSUFFICIENT_SCOPE':
-        return {
-          httpStatus: 403,
-          code: 'ACCESS_DENIED',
-          message: "You don't have permission to view this contact in Bitrix24.",
-          retryable: false,
-        }
-      case 'HTTP_401':
-      case 'TOKEN_MISSING':
-      case 'SESSION_EXPIRED':
-        return {
-          httpStatus: 401,
-          code: 'SESSION_EXPIRED',
-          message: 'Your session has expired. Please reopen this tab from the Contact card.',
-          retryable: false,
-        }
-      case 'HTTP_429':
-      case 'RATE_LIMITED':
-        return {
-          httpStatus: 429,
-          code: 'RATE_LIMITED',
-          message: 'Bitrix24 is rate-limiting requests right now. Please try again shortly.',
-          retryable: true,
-          retryAfterSeconds: err.retryAfterSeconds ?? 5,
-        }
-      default:
-        if (err.httpStatus >= 500 || err.httpStatus === 503) {
-          return {
-            httpStatus: 503,
-            code: 'UPSTREAM_UNAVAILABLE',
-            message: 'Bitrix24/Vibecode is temporarily unavailable. Please try again.',
-            retryable: true,
-            retryAfterSeconds: err.retryAfterSeconds ?? 5,
-          }
-        }
-        return {
-          httpStatus: 502,
-          code: err.code,
-          message: 'This statistic could not be loaded right now.',
-          retryable: true,
-        }
+  if (!(err instanceof VibeApiError)) {
+    return {
+      httpStatus: 500,
+      code: 'INTERNAL_ERROR',
+      message: 'Something went wrong on our side. Please try again.',
+      retryable: true,
+    }
+  }
+
+  if (NOT_FOUND_CODES.has(err.code) || err.httpStatus === 404) {
+    return {
+      httpStatus: 404,
+      code: 'CONTACT_NOT_FOUND',
+      message: 'This contact could not be found. It may have been deleted.',
+      retryable: false,
+    }
+  }
+
+  if (SESSION_CODES.has(err.code) || err.httpStatus === 401) {
+    return {
+      httpStatus: 401,
+      code: 'SESSION_EXPIRED',
+      message: 'Your session has expired. Please reopen this tab from the Contact card.',
+      retryable: false,
+    }
+  }
+
+  if (SCOPE_DENIED_CODES.has(err.code)) {
+    return {
+      httpStatus: 403,
+      code: 'SCOPE_DENIED',
+      message: 'This app is missing a required Bitrix24 permission (CRM). Ask an administrator to reinstall it.',
+      retryable: false,
+    }
+  }
+
+  if (ACCESS_DENIED_CODES.has(err.code) || err.httpStatus === 403) {
+    return {
+      httpStatus: 403,
+      code: 'ACCESS_DENIED',
+      message: "You don't have permission to view this contact in Bitrix24.",
+      retryable: false,
+    }
+  }
+
+  if (RATE_LIMIT_CODES.has(err.code) || err.httpStatus === 429) {
+    return {
+      httpStatus: 429,
+      code: 'RATE_LIMITED',
+      message: 'Bitrix24 is rate-limiting requests right now. Please try again shortly.',
+      retryable: true,
+      retryAfterSeconds: err.retryAfterSeconds ?? 5,
+    }
+  }
+
+  if (err.httpStatus >= 500 || err.httpStatus === 503) {
+    return {
+      httpStatus: 503,
+      code: 'UPSTREAM_UNAVAILABLE',
+      message: 'Bitrix24/Vibecode is temporarily unavailable. Please try again.',
+      retryable: true,
+      retryAfterSeconds: err.retryAfterSeconds ?? 5,
     }
   }
 
   return {
-    httpStatus: 500,
-    code: 'INTERNAL_ERROR',
-    message: 'Something went wrong on our side. Please try again.',
+    httpStatus: 502,
+    code: err.code,
+    message: 'This statistic could not be loaded right now.',
     retryable: true,
   }
 }
