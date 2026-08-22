@@ -37,6 +37,13 @@ export interface StageStatusRecord {
   semantics: string | null
 }
 
+/** GET /v1/deal-categories row — a pipeline. categoryId 0 (the built-in default
+ *  pipeline) never appears here; it is synthesized as "Default pipeline". */
+export interface PipelineRecord {
+  id: number
+  name: string
+}
+
 export interface DealHistoryValue {
   /** Raw Bitrix24 stage code, or null when there is no previous stage to show. */
   raw: string | null
@@ -49,12 +56,13 @@ export interface DealHistoryEntry {
   changedAt: string
   changedById: number | null
   changedByName: string | null
-  fieldId: 'stageId'
+  fieldId: 'stageId' | 'categoryId'
   fieldLabel: string
   oldValue: DealHistoryValue
   newValue: DealHistoryValue
-  kind: 'stage'
-  /** Bitrix24 stage semantics for this entry's new stage: P (in progress), S (won), F (lost/other terminal). */
+  kind: 'stage' | 'pipeline'
+  /** Bitrix24 stage semantics for this entry's new stage: P (in progress), S (won), F (lost/other terminal).
+   *  Always "P" on a "pipeline" entry — categoryId itself carries no semantics of its own. */
   semantics: string
 }
 
@@ -63,6 +71,7 @@ export interface DealHistoryPage {
     id: number
     title: string
     currentStageLabel: string
+    currentPipelineLabel: string
   }
   entries: DealHistoryEntry[]
   order: 'asc' | 'desc'

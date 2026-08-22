@@ -22,12 +22,24 @@ exposes **one** history source for deals:
 There is **no** equivalent of `crm.item.history.list` (full field-value
 change history) on this platform — confirmed by reading the full `entities`,
 `crmExtras`, `timelines`/`timelineLogs`, and `knownIssues` sections of the
-guide, and by the OpenAPI schema. So this app shows **stage/status
+guide, and by the OpenAPI schema. So this app shows **stage and pipeline
 transitions only**, not arbitrary field edits. That is a platform
 limitation, not a shortcut: the UI states this honestly ("This view shows
-field and stage history available from Bitrix24. It does not include
-general timeline activities.") rather than implying a completeness it
-cannot deliver.
+stage and pipeline change history available from Bitrix24. It does not
+include other field edits or general timeline activities.") rather than
+implying a completeness it cannot deliver.
+
+Every `/v1/stage-history` record carries both `stageId` **and**
+`categoryId` (verified live), so a pipeline move is detected the same way
+a stage move is: when a record's `categoryId` differs from the
+immediately-preceding record's. Since Bitrix24 snapshots both fields
+together in one record, a pipeline move and its accompanying stage move
+render as two adjacent rows sharing the same timestamp — confirmed against
+two real deals that actually changed pipeline (`#1569`: Default pipeline →
+Neukunden; `#1485`: Testpipeline / Entwicklung → Flight Inquiry).
+`categoryId 0` is Bitrix24's built-in default pipeline, which never has its
+own row in `GET /v1/deal-categories` — shown as "Default pipeline" rather
+than left unresolved.
 
 Two further limitations, both verified against a real portal
 (`linxys-demo.bitrix24.de`) rather than assumed:
@@ -89,29 +101,45 @@ Vibecode V1 API → Bitrix24 CRM
 
 ```json
 {
-  "deal": { "id": 368, "title": "Bowman AG", "currentStageLabel": "Vertrag unterschieben" },
+  "deal": { "id": 1485, "title": "Sprach Lead (Kopie)", "currentStageLabel": "New inquiry", "currentPipelineLabel": "Flight Inquiry" },
   "entries": [
     {
-      "stableId": "stage-1742",
-      "changedAt": "2021-02-04T14:39:32+03:00",
-      "changedById": 6,
-      "changedByName": "Stefan Krügl",
+      "stableId": "stage-<id>",
+      "changedAt": "2025-11-06T22:34:47+03:00",
+      "changedById": null,
+      "changedByName": null,
       "fieldId": "stageId",
       "fieldLabel": "Stage",
-      "oldValue": { "raw": "4", "label": "Orange" },
-      "newValue": { "raw": "WON", "label": "Vertrag unterschieben" },
+      "oldValue": { "raw": "NEW", "label": "Eingang" },
+      "newValue": { "raw": "UC_...", "label": "New inquiry" },
       "kind": "stage",
-      "semantics": "S"
+      "semantics": "P"
+    },
+    {
+      "stableId": "pipeline-<id>",
+      "changedAt": "2025-11-06T22:34:47+03:00",
+      "changedById": null,
+      "changedByName": null,
+      "fieldId": "categoryId",
+      "fieldLabel": "Pipeline",
+      "oldValue": { "raw": "205", "label": "Testpipeline / Entwicklung" },
+      "newValue": { "raw": "229", "label": "Flight Inquiry" },
+      "kind": "pipeline",
+      "semantics": "P"
     }
   ],
   "order": "asc",
-  "loaded": 5,
+  "loaded": 3,
   "hasMore": false,
   "nextOffset": null,
-  "totalKnown": 5,
+  "totalKnown": 3,
   "warnings": []
 }
 ```
+
+Verified live: deal `#1485` really did move pipelines, and the stage + pipeline
+rows above share that record's exact timestamp — this is real production data,
+not a constructed example.
 
 `order` defaults to `asc` (oldest first). `totalKnown` is the exact count
 (this app fetches a deal's full stage history server-side, bounded at 2000

@@ -36,6 +36,7 @@ function semanticBadge(semantics) {
 }
 
 function historyRow(entry) {
+  const isPipeline = entry.kind === 'pipeline'
   return `
     <div class="history-row" role="row">
       <div class="cell cell-date" role="cell" data-label="Date &amp; time">${formatDateTime(entry.changedAt)}</div>
@@ -43,11 +44,11 @@ function historyRow(entry) {
         ${icons.user}<span>${entry.changedByName ? escapeHtml(entry.changedByName) : 'User unavailable'}</span>
       </div>
       <div class="cell cell-field" role="cell" data-label="Field">
-        <span class="field-badge">${icons.stage}Stage</span>
+        <span class="field-badge ${isPipeline ? 'pipeline' : ''}">${isPipeline ? icons.pipeline : icons.stage}${escapeHtml(entry.fieldLabel)}</span>
       </div>
       <div class="cell cell-old" role="cell" data-label="Previous value">${escapeHtml(entry.oldValue.label)}</div>
       <div class="cell cell-new" role="cell" data-label="New value">
-        ${escapeHtml(entry.newValue.label)}${semanticBadge(entry.semantics)}
+        ${escapeHtml(entry.newValue.label)}${isPipeline ? '' : semanticBadge(entry.semantics)}
       </div>
     </div>`
 }
@@ -102,7 +103,7 @@ export function renderHistory(root, page, handlers) {
       <div class="header-titles">
         <h1>Change History</h1>
         <p class="deal-title">${escapeHtml(deal.title)}</p>
-        <p class="deal-meta">${escapeHtml(countLabel)}</p>
+        <p class="deal-meta">${escapeHtml(deal.currentPipelineLabel)} · ${escapeHtml(deal.currentStageLabel)} — ${escapeHtml(countLabel)}</p>
       </div>
       <div class="header-actions">
         <label class="order-select">
@@ -123,7 +124,7 @@ export function renderHistory(root, page, handlers) {
 
     <div class="notice-banner info">
       ${icons.info}
-      <span>This view shows field and stage history available from Bitrix24. It does not include general timeline activities.</span>
+      <span>This view shows stage and pipeline change history available from Bitrix24. It does not include other field edits or general timeline activities.</span>
     </div>
 
     ${

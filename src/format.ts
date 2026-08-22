@@ -1,4 +1,4 @@
-import { DealHistoryEntry, StageHistoryRecord, StageStatusRecord } from './types'
+import { DealHistoryEntry, PipelineRecord, StageHistoryRecord, StageStatusRecord } from './types'
 
 /**
  * GET /v1/stage-history has no documented sort parameter (verified against the
@@ -78,6 +78,31 @@ export function resolveStageLabel(
   return `Unknown stage (${stageId})`
 }
 
+const DEFAULT_PIPELINE_CATEGORY_ID = 0
+
+/**
+ * categoryId 0 is Bitrix24's built-in default pipeline — verified (GET /v1/guide
+ * importantNotes.categoryIdFormat) to never appear as its own GET /v1/deal-categories
+ * row, so it is described rather than looked up. Every other id is resolved from
+ * that list, falling back honestly for a deleted/inaccessible pipeline.
+ */
+export function resolvePipelineLabel(pipelines: ReadonlyMap<number, PipelineRecord>, categoryId: number): string {
+  if (categoryId === DEFAULT_PIPELINE_CATEGORY_ID) return 'Default pipeline'
+  const found = pipelines.get(categoryId)
+  if (found) return found.name
+  return `Unknown pipeline (${categoryId})`
+}
+
+function actorFor(
+  record: StageHistoryRecord,
+  moverMap: ReadonlyMap<number, number>,
+  userNames: ReadonlyMap<number, string>,
+): { changedById: number | null; changedByName: string | null } {
+  const changedById = moverMap.get(record.id) ?? null
+  const changedByName = changedById !== null ? userNames.get(changedById) ?? `User #${changedById}` : null
+  return { changedById, changedByName }
+}
+
 export function formatEntry(
   transition: StageTransition,
   labels: ReadonlyMap<string, StageStatusRecord>,
@@ -92,20 +117,46 @@ export function formatEntry(
 
   const newValue = { raw: record.stageId, label: resolveStageLabel(labels, record.categoryId, record.stageId) }
 
-  const changedById = moverMap.get(record.id) ?? null
-  const changedByName = changedById !== null ? userNames.get(changedById) ?? `User #${changedById}` : null
-
   return {
     stableId: `stage-${record.id}`,
     changedAt: record.createdAt,
-    changedById,
-    changedByName,
+    ...actorFor(record, moverMap, userNames),
     fieldId: 'stageId',
     fieldLabel: 'Stage',
     oldValue,
     newValue,
     kind: 'stage',
     semantics: record.stageSemanticId,
+  }
+}
+
+/**
+ * Each stage-history record snapshots (categoryId, stageId) at one moment, so a
+ * pipeline move and a stage move can happen in the very same record — verified
+ * live: every record carries categoryId, not just stageId. Returns null when the
+ * pipeline is unchanged from the previous record (the common case), or when this
+ * is the deal's first-ever record (no previous pipeline to compare against — the
+ * deal was simply created in this pipeline, which is not a "change").
+ */
+export function formatPipelineEntry(
+  transition: StageTransition,
+  pipelines: ReadonlyMap<number, PipelineRecord>,
+  moverMap: ReadonlyMap<number, number>,
+  userNames: ReadonlyMap<number, string>,
+): DealHistoryEntry | null {
+  const { record, previous } = transition
+  if (!previous || previous.categoryId === record.categoryId) return null
+
+  return {
+    stableId: `pipeline-${record.id}`,
+    changedAt: record.createdAt,
+    ...actorFor(record, moverMap, userNames),
+    fieldId: 'categoryId',
+    fieldLabel: 'Pipeline',
+    oldValue: { raw: String(previous.categoryId), label: resolvePipelineLabel(pipelines, previous.categoryId) },
+    newValue: { raw: String(record.categoryId), label: resolvePipelineLabel(pipelines, record.categoryId) },
+    kind: 'pipeline',
+    semantics: 'P',
   }
 }
 

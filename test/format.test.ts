@@ -5,10 +5,12 @@ import {
   deriveTransitions,
   attachMoverToLatest,
   resolveStageLabel,
+  resolvePipelineLabel,
   formatEntry,
+  formatPipelineEntry,
   paginate,
 } from '../src/format'
-import { StageHistoryRecord, StageStatusRecord } from '../src/types'
+import { PipelineRecord, StageHistoryRecord, StageStatusRecord } from '../src/types'
 
 function record(partial: Partial<StageHistoryRecord> & { id: number }): StageHistoryRecord {
   return {
@@ -122,6 +124,49 @@ test('formatEntry: stableId is derived from the record id, not array position', 
   const transitions = deriveTransitions([record({ id: 999 })])
   const entry = formatEntry(transitions[0], new Map(), new Map(), new Map())
   assert.equal(entry.stableId, 'stage-999')
+})
+
+test('resolvePipelineLabel special-cases categoryId 0 as the default pipeline without a lookup', () => {
+  assert.equal(resolvePipelineLabel(new Map(), 0), 'Default pipeline')
+})
+
+test('resolvePipelineLabel resolves a known custom pipeline and falls back honestly for an unknown one', () => {
+  const pipelines = new Map<number, PipelineRecord>([[205, { id: 205, name: 'Testpipeline / Entwicklung' }]])
+  assert.equal(resolvePipelineLabel(pipelines, 205), 'Testpipeline / Entwicklung')
+  assert.equal(resolvePipelineLabel(pipelines, 999), 'Unknown pipeline (999)')
+})
+
+test('formatPipelineEntry returns null when the pipeline did not change', () => {
+  const sorted = [record({ id: 1, categoryId: 0 }), record({ id: 2, categoryId: 0 })]
+  const transitions = deriveTransitions(sorted)
+  assert.equal(formatPipelineEntry(transitions[1], new Map(), new Map(), new Map()), null)
+})
+
+test('formatPipelineEntry returns null on the first-ever record — there is no previous pipeline to compare', () => {
+  const transitions = deriveTransitions([record({ id: 1, categoryId: 205 })])
+  assert.equal(formatPipelineEntry(transitions[0], new Map(), new Map(), new Map()), null)
+})
+
+test('formatPipelineEntry fires when categoryId changes between consecutive records, alongside the stage change', () => {
+  const sorted = [
+    record({ id: 1, categoryId: 0, stageId: 'NEW', createdAt: '2020-01-01T00:00:00Z' }),
+    record({ id: 2, categoryId: 205, stageId: 'C205:NEW', createdAt: '2020-02-01T00:00:00Z' }),
+  ]
+  const transitions = deriveTransitions(sorted)
+  const pipelines = new Map<number, PipelineRecord>([[205, { id: 205, name: 'Testpipeline / Entwicklung' }]])
+
+  const stageEntry = formatEntry(transitions[1], new Map(), new Map(), new Map())
+  assert.equal(stageEntry.kind, 'stage')
+
+  const pipelineEntry = formatPipelineEntry(transitions[1], pipelines, new Map(), new Map())
+  assert.notEqual(pipelineEntry, null)
+  assert.equal(pipelineEntry?.kind, 'pipeline')
+  assert.equal(pipelineEntry?.fieldId, 'categoryId')
+  assert.equal(pipelineEntry?.oldValue.label, 'Default pipeline')
+  assert.equal(pipelineEntry?.newValue.label, 'Testpipeline / Entwicklung')
+  assert.equal(pipelineEntry?.stableId, 'pipeline-2')
+  // Both entries share the same timestamp — they describe the same atomic move.
+  assert.equal(pipelineEntry?.changedAt, stageEntry.changedAt)
 })
 
 test('paginate: hasMore is true while more items remain past the slice', () => {

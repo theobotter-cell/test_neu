@@ -3,16 +3,20 @@ import {
   attachMoverToLatest,
   deriveTransitions,
   formatEntry,
+  formatPipelineEntry,
   paginate,
+  resolvePipelineLabel,
   resolveStageLabel,
   sortAscending,
 } from './format'
-import { DealHistoryPage, DealRecord, StageHistoryRecord, StageStatusRecord } from './types'
+import { DealHistoryEntry, DealHistoryPage, DealRecord, PipelineRecord, StageHistoryRecord, StageStatusRecord } from './types'
 
 // Verified live against https://vibecode.bitrix24.com/v1/guide and /v1/openapi.json:
 // deals only exposes /v1/stage-history (crm.stagehistory.list equivalent) — there is
 // no field-value change-history endpoint (no crm.item.history.list equivalent) on
-// this platform surface, so "kind" is always "stage" here.
+// this platform surface. Every record carries both stageId and categoryId, so a
+// "kind: stage" entry is always emitted and a "kind: pipeline" entry alongside it
+// whenever the deal's pipeline also changed at that same moment.
 const DEAL_ENTITY_TYPE = 'deal'
 const STAGE_HISTORY_PAGE_SIZE = 200
 const MAX_HISTORY_RECORDS = 2000
@@ -135,6 +139,33 @@ async function resolveStageLabels(
   return map
 }
 
+interface RawCategory {
+  id: number
+  name: string
+}
+
+/**
+ * Pipelines are portal-level, not per-deal — GET /v1/deal-categories lists every
+ * pipeline on the portal in one call, so this is fetched once per request rather
+ * than per categoryId. categoryId 0 (the default pipeline) deliberately never
+ * appears in that list — resolvePipelineLabel special-cases it.
+ */
+async function resolvePipelines(bearer: string): Promise<Map<number, PipelineRecord>> {
+  const map = new Map<number, PipelineRecord>()
+  try {
+    const { data } = await vibeCallEnvelope<RawCategory[]>('/v1/deal-categories', {
+      bearer,
+      query: { limit: 200 },
+    })
+    for (const c of data) {
+      map.set(c.id, { id: c.id, name: c.name })
+    }
+  } catch {
+    // Left unresolved — resolvePipelineLabel falls back to "Unknown pipeline (...)".
+  }
+  return map
+}
+
 interface RawUser {
   name?: string | null
   lastName?: string | null
@@ -179,12 +210,19 @@ export async function getDealHistoryPage(
   const moverMap = attachMoverToLatest(transitions, deal.movedBy, deal.movedTime)
 
   const categoryIds = [...records.map((r) => r.categoryId), deal.categoryId]
-  const [labels, userNames] = await Promise.all([
+  const [labels, pipelines, userNames] = await Promise.all([
     resolveStageLabels(categoryIds, bearer),
+    resolvePipelines(bearer),
     resolveUserNames([...moverMap.values()], bearer),
   ])
 
-  const ascendingEntries = transitions.map((t) => formatEntry(t, labels, moverMap, userNames))
+  const ascendingEntries: DealHistoryEntry[] = []
+  for (const t of transitions) {
+    ascendingEntries.push(formatEntry(t, labels, moverMap, userNames))
+    const pipelineEntry = formatPipelineEntry(t, pipelines, moverMap, userNames)
+    if (pipelineEntry) ascendingEntries.push(pipelineEntry)
+  }
+
   const ordered = order === 'asc' ? ascendingEntries : [...ascendingEntries].reverse()
   const { page, hasMore } = paginate(ordered, offset, limit)
 
@@ -193,6 +231,7 @@ export async function getDealHistoryPage(
       id: deal.id,
       title: deal.title,
       currentStageLabel: resolveStageLabel(labels, deal.categoryId, deal.stageId),
+      currentPipelineLabel: resolvePipelineLabel(pipelines, deal.categoryId),
     },
     entries: page,
     order,

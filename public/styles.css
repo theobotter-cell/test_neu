@@ -258,6 +258,11 @@ body {
   height: 12px;
 }
 
+.field-badge.pipeline {
+  background: #f3e8ff;
+  color: #7c3aed;
+}
+
 .stage-flag {
   display: inline-block;
   margin-left: 6px;
