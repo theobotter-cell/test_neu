@@ -2,7 +2,7 @@ import express, { Request, Response, NextFunction } from 'express'
 import path from 'path'
 import { config } from './config'
 import { identityMiddleware, AuthedRequest } from './identity'
-import { getDealHistoryPage, normalizePageParams, validateDealId } from './dealHistory'
+import { getDealHistoryPage, normalizePageParams, normalizeSearchQuery, searchDeals, validateDealId } from './dealHistory'
 import { toFriendlyError } from './errors'
 
 const app = express()
@@ -44,6 +44,30 @@ app.get('/api/deal-history/:dealId', identityMiddleware, async (req: AuthedReque
   try {
     const page = await getDealHistoryPage(dealId, req.bearer, order, offset, limit)
     res.status(200).json(page)
+  } catch (err) {
+    const friendly = toFriendlyError(err)
+    res.status(friendly.httpStatus).json({
+      error: { code: friendly.code, message: friendly.message, retryable: friendly.retryable },
+    })
+  }
+})
+
+app.get('/api/deals/search', identityMiddleware, async (req: AuthedRequest, res: Response) => {
+  const query = normalizeSearchQuery(req.query.q)
+  if (query === null) {
+    res.status(200).json({ results: [] })
+    return
+  }
+  if (!req.bearer) {
+    res.status(401).json({
+      error: { code: 'SESSION_EXPIRED', message: 'Your session has expired. Please reopen this app.' },
+    })
+    return
+  }
+
+  try {
+    const results = await searchDeals(query, req.bearer)
+    res.status(200).json({ results })
   } catch (err) {
     const friendly = toFriendlyError(err)
     res.status(friendly.httpStatus).json({

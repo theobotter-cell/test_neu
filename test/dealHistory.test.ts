@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { validateDealId, normalizePageParams, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../src/dealHistory'
+import { validateDealId, normalizePageParams, normalizeSearchQuery, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../src/dealHistory'
 
 test('validateDealId accepts a bare positive integer', () => {
   assert.equal(validateDealId('368'), 368)
@@ -42,4 +42,23 @@ test('normalizePageParams falls back to defaults for a negative or non-numeric o
   assert.equal(normalizePageParams('asc', 'nope', 10).offset, 0)
   assert.equal(normalizePageParams('asc', 0, 'nope').limit, DEFAULT_PAGE_SIZE)
   assert.equal(normalizePageParams('asc', 0, 0).limit, DEFAULT_PAGE_SIZE)
+})
+
+test('normalizeSearchQuery trims whitespace and rejects a too-short query', () => {
+  assert.equal(normalizeSearchQuery('  Bowman  '), 'Bowman')
+  assert.equal(normalizeSearchQuery('a'), null)
+  assert.equal(normalizeSearchQuery(''), null)
+  assert.equal(normalizeSearchQuery('  '), null)
+})
+
+test('normalizeSearchQuery rejects non-string input rather than coercing it', () => {
+  assert.equal(normalizeSearchQuery(undefined), null)
+  assert.equal(normalizeSearchQuery(123), null)
+  assert.equal(normalizeSearchQuery(['Bowman']), null)
+})
+
+test('normalizeSearchQuery caps an excessively long query rather than sending it upstream unbounded', () => {
+  const long = 'x'.repeat(500)
+  const result = normalizeSearchQuery(long)
+  assert.equal(result?.length, 200)
 })

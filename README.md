@@ -63,18 +63,29 @@ Two further limitations, both verified against a real portal
 
 ## Entry points
 
-Bound placements, all scoped to a single Deal already in context (no list-level
-or bulk placements — those don't carry a single entity ID):
-
-| Placement | Where it shows | Context shape |
+| Placement | Where it shows | Deal context |
 |---|---|---|
 | `CRM_DEAL_DETAIL_TAB` | Tab on the Deal card | `placement_options: {"ID": "<deal>"}` — documented |
 | `CRM_DEAL_DETAIL_TOOLBAR` | Dropdown item in the Deal card toolbar | same — documented |
 | `CRM_DEAL_DETAIL_ACTIVITY` | Activity button in the Deal card | same, by Bitrix24 convention — not explicitly documented on this platform, unconfirmed by a real click-through |
+| `LEFT_MENU` | Item in the portal's left navigation | **none** — see below |
 
-All three open the identical read-only history view; `placement.js`/`app.js`
-don't branch on which placement opened the app, so no extra code was needed —
-just binding the placement on the Bitrix24 side.
+The first three all open the identical read-only history view; `placement.js`/
+`app.js` don't branch on which placement opened the app, so no extra code was
+needed for those — just binding the placement on the Bitrix24 side.
+
+`LEFT_MENU` is different: it isn't attached to any card, so Bitrix24 sends no
+`placement_options` at all. When the app is opened with no Deal ID in context,
+it shows a search box instead of the history view (`GET /api/deals/search?q=`,
+title `$contains` match plus an exact-ID lookup when the query is numeric).
+This is the **only** place in the app where a Deal ID doesn't come from
+trusted placement context — deliberately, since there is no such context here.
+It's still safe: the search runs with the same forwarded per-user bearer as
+every other call, so results (and the deal a click opens) are never broader
+than what that employee can already see in Bitrix24 itself, and the chosen ID
+still goes through the same `fetchDeal`/`getDealHistoryPage` path used
+everywhere else — no new trust boundary, just a different (and honest, in
+this one case, user-supplied) way to reach it.
 
 ## Architecture
 

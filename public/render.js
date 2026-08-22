@@ -77,6 +77,65 @@ export function renderSkeleton(root) {
     <div class="history-list">${rows}</div>`
 }
 
+/**
+ * Renders the search shell ONCE and returns the results container — callers
+ * update only that container on each keystroke, so the input never loses focus
+ * or cursor position to a full re-render while the employee is typing.
+ */
+export function renderSearchShell(root, { onInput, onSelect }) {
+  root.innerHTML = `
+    <div class="header">
+      <div class="header-titles">
+        <h1>Change History</h1>
+        <p class="deal-meta">Search for a Deal to view its stage and pipeline history.</p>
+      </div>
+    </div>
+    <div class="search-box">
+      ${icons.info}
+      <input type="search" class="search-input" placeholder="Search Deals by title or ID…" autocomplete="off" aria-label="Search Deals" />
+    </div>
+    <div class="search-results" aria-live="polite"></div>
+  `
+  const input = root.querySelector('.search-input')
+  input.addEventListener('input', () => onInput(input.value))
+  input.focus()
+
+  const resultsContainer = root.querySelector('.search-results')
+  resultsContainer.addEventListener('click', (e) => {
+    const btn = e.target.closest('.search-result')
+    if (btn) onSelect(Number(btn.dataset.id))
+  })
+  return resultsContainer
+}
+
+export function renderSearchResults(container, { query, results, loading, error }) {
+  if (loading) {
+    container.innerHTML = `<div class="search-hint">Searching…</div>`
+    return
+  }
+  if (error) {
+    container.innerHTML = `<div class="search-hint search-hint-error">${escapeHtml(error)}</div>`
+    return
+  }
+  if (!query) {
+    container.innerHTML = ''
+    return
+  }
+  if (results.length === 0) {
+    container.innerHTML = `<div class="search-hint">No Deals match "${escapeHtml(query)}".</div>`
+    return
+  }
+  container.innerHTML = results
+    .map(
+      (d) => `
+      <button type="button" class="search-result" data-id="${d.id}">
+        <span class="search-result-title">${escapeHtml(d.title)}</span>
+        <span class="search-result-meta">${escapeHtml(d.pipelineLabel)} · ${escapeHtml(d.stageLabel)} · #${d.id}</span>
+      </button>`,
+    )
+    .join('')
+}
+
 export function renderStatePanel(root, { title, message, showRetry, onRetry }) {
   root.innerHTML = ''
   const panel = el(`
@@ -93,7 +152,7 @@ export function renderStatePanel(root, { title, message, showRetry, onRetry }) {
 
 export function renderHistory(root, page, handlers) {
   const { deal, entries, order, loaded, hasMore, totalKnown, warnings } = page
-  const { onRefresh, onOrderChange, onLoadMore, refreshing, loadingMore } = handlers
+  const { onRefresh, onOrderChange, onLoadMore, onBackToSearch, refreshing, loadingMore } = handlers
 
   const countLabel =
     totalKnown !== null ? `${totalKnown} change${totalKnown === 1 ? '' : 's'} available` : `Loaded ${loaded} changes`
@@ -101,6 +160,7 @@ export function renderHistory(root, page, handlers) {
   root.innerHTML = `
     <div class="header">
       <div class="header-titles">
+        ${onBackToSearch ? '<button type="button" class="back-to-search-btn">&larr; Search</button>' : ''}
         <h1>Change History</h1>
         <p class="deal-title">${escapeHtml(deal.title)}</p>
         <p class="deal-meta">${escapeHtml(deal.currentPipelineLabel)} · ${escapeHtml(deal.currentStageLabel)} — ${escapeHtml(countLabel)}</p>
@@ -164,4 +224,6 @@ export function renderHistory(root, page, handlers) {
   root.querySelector('.order-select select').addEventListener('change', (e) => onOrderChange(e.target.value))
   const loadMoreBtn = root.querySelector('.load-more-btn')
   if (loadMoreBtn) loadMoreBtn.addEventListener('click', onLoadMore)
+  const backBtn = root.querySelector('.back-to-search-btn')
+  if (backBtn) backBtn.addEventListener('click', onBackToSearch)
 }

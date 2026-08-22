@@ -19,6 +19,18 @@ async function parseErrorBody(res) {
   }
 }
 
+export async function searchDeals(query) {
+  const res = await fetch(`/api/deals/search?q=${encodeURIComponent(query)}`, {
+    headers: { Accept: 'application/json' },
+  })
+  if (!res.ok) {
+    const err = await parseErrorBody(res)
+    throw new ApiError(res.status, err.code || 'UNKNOWN', err.message || 'Search failed.', Boolean(err.retryable))
+  }
+  const body = await res.json()
+  return body.results
+}
+
 export async function fetchDealHistory(dealId, { order, offset = 0, limit = 50 } = {}) {
   const qs = new URLSearchParams({ order, offset: String(offset), limit: String(limit) })
   const res = await fetch(`/api/deal-history/${encodeURIComponent(dealId)}?${qs}`, {

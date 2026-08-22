@@ -188,6 +188,71 @@ async function resolveUserNames(userIds: readonly number[], bearer: string): Pro
   return map
 }
 
+export interface DealSearchResult {
+  id: number
+  title: string
+  stageLabel: string
+  pipelineLabel: string
+}
+
+const SEARCH_RESULT_LIMIT = 10
+const MIN_QUERY_LENGTH = 2
+const MAX_QUERY_LENGTH = 200
+
+export function normalizeSearchQuery(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const trimmed = raw.trim().slice(0, MAX_QUERY_LENGTH)
+  return trimmed.length >= MIN_QUERY_LENGTH ? trimmed : null
+}
+
+/**
+ * The only entry point in this app where a Deal ID is not read from trusted
+ * placement context — the LEFT_MENU placement has no entity in context at all.
+ * Still runs entirely in the searching employee's own Bitrix24 permissions (the
+ * same forwarded bearer as every other call here), so results and the deals
+ * reachable from them are never broader than what that employee could already
+ * see in Bitrix24 itself.
+ */
+export async function searchDeals(query: string, bearer: string): Promise<DealSearchResult[]> {
+  const byTitle = vibeCallEnvelope<RawDeal[]>('/v1/deals/search', {
+    method: 'POST',
+    bearer,
+    body: {
+      filter: { title: { $contains: query } },
+      select: ['id', 'title', 'stageId', 'categoryId'],
+      limit: SEARCH_RESULT_LIMIT,
+    },
+  })
+
+  const results = new Map<number, RawDeal>()
+  for (const d of (await byTitle).data) results.set(d.id, d)
+
+  // A purely-numeric query might be a Deal ID rather than (or in addition to)
+  // text in the title — try an exact lookup too, ignoring a miss or denial.
+  if (/^[1-9][0-9]*$/.test(query)) {
+    try {
+      const exact = await vibeCall<RawDeal>(`/v1/deals/${query}`, { bearer })
+      results.set(exact.id, exact)
+    } catch {
+      // Not found, or not visible to this employee — the title matches (if any) still stand.
+    }
+  }
+
+  const list = [...results.values()].slice(0, SEARCH_RESULT_LIMIT)
+  const categoryIds = list.map((d) => d.categoryId ?? 0)
+  const [labels, pipelines] = await Promise.all([resolveStageLabels(categoryIds, bearer), resolvePipelines(bearer)])
+
+  return list.map((d) => {
+    const categoryId = d.categoryId ?? 0
+    return {
+      id: d.id,
+      title: d.title && d.title.trim() ? d.title : `Deal #${d.id}`,
+      stageLabel: resolveStageLabel(labels, categoryId, d.stageId),
+      pipelineLabel: resolvePipelineLabel(pipelines, categoryId),
+    }
+  })
+}
+
 export async function getDealHistoryPage(
   dealId: number,
   bearer: string,
