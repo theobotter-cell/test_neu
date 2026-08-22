@@ -1,0 +1,25 @@
+{
+  "name": "contact-insights",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bitrix24 Contact Insights app (CRM_CONTACT_DETAIL_TAB placement) deployed on Vibecode Black Hole.",
+  "type": "commonjs",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.10",
+    "typescript": "^5.5.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
