@@ -1,0 +1,24 @@
+{
+  "name": "road-to-colombia",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Road to Colombia – ein 2D-Endless-Runner fuer Desktop und Smartphone (Vite + TypeScript + Phaser 3).",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "preview": "vite preview --host",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "generate:faces": "node scripts/generate-placeholder-faces.mjs"
+  },
+  "dependencies": {
+    "phaser": "^3.80.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "vite": "^5.4.8"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#1b2a4a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta
+      name="description"
+      content="Road to Colombia – ein 2D-Endless-Runner-Spiel im Browser."
+    />
+    <title>ROAD TO COLOMBIA</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app-root">
+      <!-- Phaser mounts its <canvas> into this container. -->
+      <div id="game-canvas-container" aria-hidden="true"></div>
+
+      <!-- Persistent title bar. Solid background so the headline is always
+           fully legible, never overlapped by any game graphic. -->
+      <header id="title-bar">
+        <h1 id="game-title">ROAD TO COLOMBIA</h1>
+      </header>
+
+      <!-- Heads-up display shown only while a run is in progress. -->
+      <div id="hud" class="hidden" aria-live="polite">
+        <div class="hud-pill" id="hud-distance">Distanz: 0 m</div>
+        <div class="hud-pill" id="hud-best">Bestwert: 0 m</div>
+      </div>
+
+      <!-- Touch jump control, only relevant/visible on touch devices. -->
+      <button id="jump-button" class="hidden" type="button" aria-label="Springen">
+        <span aria-hidden="true">⬆</span><span class="jump-label">SPRUNG</span>
+      </button>
+
+      <!-- Start / character selection screen. -->
+      <section id="character-select-screen" class="screen">
+        <p class="screen-subtitle">Wähle deine Figur für den Lauf nach Kolumbien</p>
+        <div id="character-grid" class="character-grid"></div>
+        <div class="best-score-display">
+          Persönlicher Bestwert: <span id="select-best-score">0 m</span>
+        </div>
+        <button id="start-button" class="primary-button" type="button">START</button>
+      </section>
+
+      <!-- Game-over dialog. -->
+      <section id="game-over-dialog" class="screen hidden" role="alertdialog" aria-labelledby="game-over-heading">
+        <h2 id="game-over-heading">Es isch geisteskrank</h2>
+        <p id="game-over-distance" class="game-over-line">Distanz: 0 m</p>
+        <p id="game-over-record" class="game-over-line game-over-record hidden">🏆 Neuer Rekord!</p>
+        <p id="game-over-best" class="game-over-line">Bestwert: 0 m</p>
+        <div class="game-over-actions">
+          <button id="retry-button" class="primary-button" type="button">NOCHMAL</button>
+          <button id="switch-character-button" class="secondary-button" type="button">Figur wechseln</button>
+        </div>
+      </section>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
