@@ -43,11 +43,11 @@ test('AC3: 800 and exactly 1000 -> no discount row', () => {
   assert.deepEqual(plan([item(1, 1000)]).actions, [])
 })
 
-test('AC4: 1500 -> 2500 replaces the 3 % row with a 5 % row (add then delete)', () => {
+test('AC4: 1500 -> 2500 replaces the 3 % row with a 5 % row (delete then add, never two rows)', () => {
   const p = plan([item(1, 2500), discountRow(9, 3, 45)], 9)
-  assert.deepEqual(p.actions.map((a) => a.type), ['add', 'delete'])
-  assert.equal(p.actions[0].row.productName, 'Rabatt 5 %')
-  assert.equal(p.actions[1].rowId, 9)
+  assert.deepEqual(p.actions.map((a) => a.type), ['delete', 'add'])
+  assert.equal(p.actions[0].rowId, 9)
+  assert.equal(p.actions[1].row.productName, 'Rabatt 5 %')
 })
 
 test('AC5: 1500 -> 800 removes the discount row', () => {

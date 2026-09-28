@@ -32,8 +32,10 @@ The discount row is a free-form row (no catalog product), 19 % VAT, tax not incl
   Duplicates are removed.
 - **Idempotent, no loops:** the target state is computed from the current
   rows; nothing is written when it already holds. A tier change (3 % ↔ 5 %) is
-  "add new row, then delete old one" (row names cannot be PATCHed); a
-  same-tier amount change is a PATCH. Other rows are never written.
+  "delete old row, then add new one" (row names cannot be PATCHed), so an
+  invoice never carries two discount rows; a same-tier amount change is a
+  PATCH. A transient Bitrix24 write error is retried once inline. Other rows
+  are never written.
 - **Errors** are logged per invoice with `invoiceId` and retried on the next
   poll (up to 5 times); other invoices continue. The process never exits on
   API errors.

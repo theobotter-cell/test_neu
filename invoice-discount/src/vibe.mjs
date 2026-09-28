@@ -28,6 +28,7 @@ export async function call(method, path, body) {
       if (attempt < MAX_RETRIES) { await sleep(500 * 2 ** attempt); continue }
       throw new VibeApiError('NETWORK_ERROR', String(err?.message || err), 0)
     }
+    if (res.status === 204) return { data: null } // e.g. DELETE of a product row
     const json = await res.json().catch(() => null)
     if (res.ok && json?.success) return { data: json.data, meta: json.meta }
     if (RETRYABLE.has(res.status) && attempt < MAX_RETRIES) {

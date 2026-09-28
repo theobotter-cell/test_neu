@@ -107,15 +107,15 @@ async function processInvoice(id, updatedTime) {
     }
     for (const a of p.actions) {
       if (a.type === 'add') {
-        const row = await invoices.addProduct(id, a.row)
+        const row = await withRetry(() => invoices.addProduct(id, a.row))
         entry.rowId = row.id
         log('info', 'discount row added', { ...base, rowId: row.id, name: a.row.productName })
       } else if (a.type === 'update') {
-        await invoices.updateProduct(id, a.rowId, a.row)
+        await withRetry(() => invoices.updateProduct(id, a.rowId, a.row))
         entry.rowId = a.rowId
         log('info', 'discount row updated', { ...base, rowId: a.rowId })
       } else if (a.type === 'delete') {
-        await invoices.deleteProduct(id, a.rowId)
+        await withRetry(() => invoices.deleteProduct(id, a.rowId))
         if (Number(entry.rowId) === Number(a.rowId)) delete entry.rowId
         log('info', 'discount row removed', { ...base, rowId: a.rowId, reason: a.reason })
       }
@@ -144,6 +144,18 @@ async function processInvoice(id, updatedTime) {
       state.retry[id] = { updatedTime, attempts }
       log('error', 'invoice processing failed — will retry next poll', { invoiceId: Number(id), attempt: attempts, code: err.code, error: err.message })
     }
+  }
+}
+
+// Bitrix24 occasionally rejects a product-row write right after another one ("could not be saved,
+// please try again"). Retry such a write once after a short pause; anything else propagates.
+async function withRetry(fn) {
+  try {
+    return await fn()
+  } catch (err) {
+    if (err.code !== 'BITRIX_ERROR') throw err
+    await new Promise((r) => setTimeout(r, 1500))
+    return fn()
   }
 }
 

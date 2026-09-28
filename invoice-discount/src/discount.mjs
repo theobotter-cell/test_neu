@@ -82,9 +82,10 @@ export function plan(rows, mappedRowId) {
   } else if (String(keep.productName).trim() === target.productName) {
     actions.push({ type: 'update', rowId: keep.id, row: { price: target.price, quantity: 1, taxRate: VAT_RATE, taxIncluded: false, discountTypeId: 1, discount: 0 } })
   } else {
-    // Name changes (3 % <-> 5 %) cannot be PATCHed — replace: add the new row, then remove the old one.
-    actions.push({ type: 'add', row: target })
+    // Name changes (3 % <-> 5 %) cannot be PATCHed — replace: remove the old row, then add the new one,
+    // so the invoice never carries two discount rows at once.
     actions.push({ type: 'delete', rowId: keep.id, reason: `replaced by ${target.productName}` })
+    actions.push({ type: 'add', row: target })
   }
   return { netCents, rate, discountCents, hash, actions }
 }
