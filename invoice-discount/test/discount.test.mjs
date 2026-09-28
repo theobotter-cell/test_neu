@@ -8,8 +8,8 @@ const item = (id, net, qty = 1, extra = {}) => ({
   quantity: qty, taxRate: 19, taxIncluded: false, discount: 0, ...extra,
 })
 const discountRow = (id, rate, net) => ({
-  id, productId: 0, productName: `Rabatt ${rate} %`, price: grossPriceFor(Math.round(net * 100)), priceExclusive: -net,
-  quantity: 1, taxRate: 19, taxIncluded: false, discount: 0,
+  id, productId: 0, productName: `Rabatt ${rate} %`, price: grossPriceFor(Math.round(net * 100)), priceNetto: 0, priceExclusive: -net,
+  quantity: 1, taxRate: 19, taxIncluded: false, discountTypeId: 1, discount: net,
 })
 
 test('tiers are strictly greater-than and not cumulative', () => {
@@ -30,6 +30,16 @@ test('AC1: 1500 net -> one "Rabatt 3 %" row, -45.00 net, 19 % VAT', () => {
   assert.equal(row.taxRate, 19)
   assert.equal(row.taxIncluded, false)
   assert.equal(row.price, -53.55) // gross; Bitrix derives priceExclusive = -45.00
+  assert.equal(row.discountTypeId, 1) // booked as row discount -> "Rabattbetrag" / "Gesamtrabatt"
+  assert.equal(row.discount, 45)
+})
+
+test('legacy discount row without row-level discount amount is PATCHed to show the discount', () => {
+  const legacy = { ...discountRow(9, 3, 45), priceNetto: -45, discountTypeId: 2, discount: 0 }
+  const p = plan([item(1, 1500), legacy], 9)
+  assert.deepEqual(p.actions.map((a) => a.type), ['update'])
+  assert.equal(p.actions[0].row.discount, 45)
+  assert.equal(p.actions[0].row.discountTypeId, 1)
 })
 
 test('AC2: 2500 net -> "Rabatt 5 %", -125.00 net', () => {

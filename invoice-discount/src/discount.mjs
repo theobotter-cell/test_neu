@@ -80,7 +80,8 @@ export function plan(rows, mappedRowId) {
   } else if (matchesTarget(keep, target, discountCents)) {
     // already correct — nothing to write
   } else if (String(keep.productName).trim() === target.productName) {
-    actions.push({ type: 'update', rowId: keep.id, row: { price: target.price, quantity: 1, taxRate: VAT_RATE, taxIncluded: false, discountTypeId: 1, discount: 0 } })
+    const { productName, sort, ...fields } = target
+    actions.push({ type: 'update', rowId: keep.id, row: fields })
   } else {
     // Name changes (3 % <-> 5 %) cannot be PATCHed — replace: remove the old row, then add the new one,
     // so the invoice never carries two discount rows at once.
@@ -90,7 +91,10 @@ export function plan(rows, mappedRowId) {
   return { netCents, rate, discountCents, hash, actions }
 }
 
-/** Gross unit price that yields exactly -discount as net (priceExclusive) at 19 % VAT, tax not included. */
+/**
+ * Gross unit price (after the row's own discount) that yields exactly -discount as net
+ * (priceExclusive) at 19 % VAT, tax not included.
+ */
 export function grossPriceFor(discountCents) {
   return -Math.round(discountCents * (100 + VAT_RATE)) / 10_000
 }
@@ -102,8 +106,11 @@ export function targetRow(rate, discountCents) {
     quantity: 1,
     taxRate: VAT_RATE,
     taxIncluded: false,
+    // The amount is booked as the row's own discount on a net list price of 0.00, so Bitrix24
+    // shows it in "Rabattbetrag" and in the invoice's "Gesamtrabatt" total, while the row
+    // total (priceExclusive = 0 - discount) is the negative net amount.
     discountTypeId: 1,
-    discount: 0,
+    discount: discountCents / 100,
     sort: 99999,
   }
 }
@@ -114,7 +121,8 @@ function matchesTarget(row, target, discountCents) {
     Number(row.quantity) === 1 &&
     Number(row.taxRate) === VAT_RATE &&
     !isTrue(row.taxIncluded) &&
-    Math.abs(Number(row.discount ?? 0)) < 0.005 &&
+    Number(row.discountTypeId) === 1 &&
+    toCents(Number(row.discount ?? 0)) === discountCents &&
     toCents(rowNet({ ...row, quantity: 1 })) === -discountCents
   )
 }
