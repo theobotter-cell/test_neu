@@ -1,0 +1,12 @@
+{
+  "name": "invoice-tier-discount",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Background app that applies a tiered discount row to Bitrix24 Smart Invoices (entity type 31).",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test test/*.test.mjs"
+  }
+}
