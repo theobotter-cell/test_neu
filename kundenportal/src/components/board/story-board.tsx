@@ -46,7 +46,12 @@ export function StoryBoard({
   const [offen, setOffen] = React.useState<{ karte: Karte; uebergang: Uebergang } | null>(null);
   const [laeuft, setLaeuft] = React.useState(false);
 
-  React.useEffect(() => setKarten(stories), [stories]);
+  // Neue Serverdaten (nach router.refresh) übernehmen – ohne Effect
+  const [quelle, setQuelle] = React.useState(stories);
+  if (stories !== quelle) {
+    setQuelle(stories);
+    setKarten(stories);
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -127,6 +132,7 @@ export function StoryBoard({
       </DndContext>
 
       <UebergangDialog
+        key={offen ? `${offen.karte.id}-${offen.uebergang.nach}` : "zu"}
         offen={offen}
         onSchliessen={() => setOffen(null)}
         onBestaetigen={async (kommentar, schaetzung) => {
@@ -162,7 +168,7 @@ function Spalte({
       ref={setNodeRef}
       aria-label={STORY_STATUS_LABEL[status]}
       className={cn(
-        "flex w-64 shrink-0 flex-col rounded-xl border bg-muted/50 p-2 transition-colors",
+        "flex w-64 shrink-0 flex-col rounded-xl border bg-muted/50 p-2 transition-colors xl:w-auto xl:min-w-0 xl:flex-1",
         aktiv && erlaubt && "border-primary/60 bg-primary/5",
         aktiv && !erlaubt && !istQuelle && "opacity-50",
         isOver && erlaubt && "border-primary bg-primary/10",
@@ -217,11 +223,6 @@ function UebergangDialog({
   const [kommentar, setKommentar] = React.useState("");
   const [schaetzung, setSchaetzung] = React.useState("");
   const [hinweis, setHinweis] = React.useState<string | null>(null);
-  React.useEffect(() => {
-    setKommentar("");
-    setSchaetzung("");
-    setHinweis(null);
-  }, [offen]);
   if (!offen) return null;
   const u = offen.uebergang;
 

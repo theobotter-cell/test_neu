@@ -218,6 +218,9 @@ insert into public.meetings (customer_id, datum, titel, berater_id, transkript) 
   ('10000000-0000-4000-a000-000000000002', current_date - 100, 'Kick-off ERP-Anbindung', '00000000-0000-4000-a000-000000000003',
    E'Teilnehmende: Erika Beispiel, Tom Keller\n\nZiel: Lieferstatus aus dem ERP im CRM anzeigen. Intervall stündlich.');
 
+update public.meetings set created_at = datum::timestamptz + interval '18 hours'
+ where customer_id in ('10000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-000000000002');
+
 -- -----------------------------------------------------------------------------
 -- Abgeschlossener Monat (Monat vor dem Vormonat) für Muster Handels
 -- -----------------------------------------------------------------------------

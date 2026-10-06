@@ -1,0 +1,56 @@
+name: Kundenportal
+
+on:
+  push:
+    paths: ["kundenportal/**", ".github/workflows/kundenportal.yml"]
+  pull_request:
+    paths: ["kundenportal/**", ".github/workflows/kundenportal.yml"]
+
+defaults:
+  run:
+    working-directory: kundenportal
+
+jobs:
+  pruefungen:
+    name: Lint, Typen, Unit-Tests, Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: kundenportal/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-platzhalter
+
+  rls:
+    name: RLS- und Workflow-Tests (Supabase lokal)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: kundenportal/package-lock.json
+      - run: npm ci
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      # Migrationen + Seed werden beim Start eingespielt
+      - run: supabase start -x studio,imgproxy,realtime,edge-runtime,logflare,vector,supavisor,postgres-meta,mailpit
+      - name: Schlüssel der lokalen Instanz übernehmen
+        run: |
+          supabase status -o env | sed -n 's/^API_URL=/SUPABASE_URL=/p; s/^ANON_KEY=/SUPABASE_ANON_KEY=/p; s/^SERVICE_ROLE_KEY=/SUPABASE_SERVICE_ROLE_KEY=/p' | tr -d '"' >> "$GITHUB_ENV"
+      - run: npm run test:rls
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      - if: always()
+        run: supabase stop --no-backup

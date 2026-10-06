@@ -30,7 +30,11 @@ export function TicketBoard({ tickets, darfBearbeiten, basis }: { tickets: Karte
   const [karten, setKarten] = React.useState(tickets);
   const [ziehend, setZiehend] = React.useState(false);
   const [fehler, setFehler] = React.useState<string | null>(null);
-  React.useEffect(() => setKarten(tickets), [tickets]);
+  const [quelle, setQuelle] = React.useState(tickets);
+  if (tickets !== quelle) {
+    setQuelle(tickets);
+    setKarten(tickets);
+  }
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor));
 
@@ -83,7 +87,7 @@ function Spalte({ status, aktiv, anzahl, darf, children }: { status: TicketStatu
       ref={setNodeRef}
       aria-label={TICKET_STATUS_LABEL[status]}
       className={cn(
-        "flex w-72 shrink-0 flex-col rounded-xl border bg-muted/50 p-2 transition-colors",
+        "flex w-72 shrink-0 flex-col rounded-xl border bg-muted/50 p-2 transition-colors lg:w-auto lg:min-w-0 lg:flex-1",
         aktiv && "border-primary/40",
         isOver && "border-primary bg-primary/10",
       )}

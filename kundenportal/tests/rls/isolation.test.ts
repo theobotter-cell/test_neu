@@ -164,6 +164,7 @@ describe("Kunde A sieht keine internen Daten", () => {
       expect((await q("select * from public.kontingent_warnungen")).rowCount).toBe(0);
       expect((await q("select * from public.audit_log")).rowCount).toBe(0);
       await erwarteFehler(q("select * from public.email_outbox"), "42501");
+      await erwarteFehler(q("select * from public.bericht_versand"), "42501");
     });
   });
 
